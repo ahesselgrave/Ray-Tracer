@@ -1,6 +1,6 @@
 CC=g++
 
-CFLAGS = -std=c++11 -g -O0 #-Wall -Wextra -Werror
+CFLAGS = -std=c++11 -g -O3 #-Wall -Wextra -Werror
 
 DEPS = template-rt.cpp
 OBJ = template-rt.o 

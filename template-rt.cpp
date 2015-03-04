@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <map>
 using namespace std;
 
 int g_width;
@@ -20,6 +21,7 @@ struct Ray
     vec4 origin;
     vec4 dir;
 };
+
 
 // TODO: add structs for spheres, lights and anything else you may need.
 
@@ -55,12 +57,22 @@ float toFloat(const string& s)
 void parseLine(const vector<string>& vs)
 {
     //TODO: add parsing of NEAR, LEFT, RIGHT, BOTTOM, TOP, SPHERE, LIGHT, BACK, AMBIENT, OUTPUT.
-    if (vs[0] == "RES")
-    {
-        g_width = (int)toFloat(vs[1]);
-        g_height = (int)toFloat(vs[2]);
-        g_colors.resize(g_width * g_height);
+    string input[11] = {"NEAR", "LEFT", "RIGHT", "BOTTOM", "TOP", "RES" "SPHERE", "LIGHT", "BACK", "AMBIENT", "OUTPUT"};
+    map<string, int> Mapagrosenhr;
+    for (int i = 0; i < 11; i++)
+        Mapagrosenhr[input[i]] = i; //map the above strings to int
+    try { //in case file has lines with incorrect formatting not in the map
+        switch(Mapagrosenhr.at(vs[0])) { 
+            default:
+                cout << vs[0] << endl;
+                break;
+        }
     }
+    catch (const out_of_range& oor){
+        cout << "Error " << oor.what() <<": incorrect input file format\n";
+        exit(1);
+    }
+
 }
 
 void loadFile(const char* filename)
@@ -196,4 +208,3 @@ int main(int argc, char* argv[])
     saveFile();
 	return 0;
 }
-
