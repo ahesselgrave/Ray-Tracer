@@ -49,22 +49,57 @@ vec4 toVec4(const string& s1, const string& s2, const string& s3)
 float toFloat(const string& s)
 {
     stringstream ss(s);
-    float f;
+    float f;  
     ss >> f;
     return f;
 }
 
 void parseLine(const vector<string>& vs)
 {
-    //TODO: add parsing of NEAR, LEFT, RIGHT, BOTTOM, TOP, SPHERE, LIGHT, BACK, AMBIENT, OUTPUT.
-    string input[11] = {"NEAR", "LEFT", "RIGHT", "BOTTOM", "TOP", "RES" "SPHERE", "LIGHT", "BACK", "AMBIENT", "OUTPUT"};
+    string input[11] = {"NEAR", "LEFT", "RIGHT", "BOTTOM", "TOP", "RES","SPHERE", "LIGHT", "BACK", "AMBIENT", "OUTPUT"};
+                       //  0       1       2         3       4      5       6      7        8        9          10
     map<string, int> Mapagrosenhr;
     for (int i = 0; i < 11; i++)
         Mapagrosenhr[input[i]] = i; //map the above strings to int
     try { //in case file has lines with incorrect formatting not in the map
         switch(Mapagrosenhr.at(vs[0])) { 
-            default:
-                cout << vs[0] << endl;
+            case 0: // NEAR
+                g_near = toFloat(vs[1]);
+                break;
+            case 1: // LEFT
+                g_left = toFloat(vs[1]);
+                break;
+            case 2: // RIGHT
+                g_right = toFloat(vs[1]);
+                break;
+            case 3: // BOTTOM
+                g_bottom = toFloat(vs[1]);
+                break;
+            case 4: // TOP
+                g_top = toFloat(vs[1]);
+                break;
+            case 5: // RES: given in template
+                g_width  = (int)toFloat(vs[1]);
+                g_height = (int)toFloat(vs[2]);
+                g_colors.resize(g_width * g_height);
+                break;
+            case 6: // SPHERE
+                //TODO: add a sphere
+                break;
+            case 7: // LIGHT
+                //TODO: add a light source
+                break;
+            case 8: // BACK
+                //TODO: add a far plane (?)
+                break;
+            case 9: // AMBIENT
+                //TODO: add ambient light
+                break;
+            case 10: // OUTPUT
+                //TODO: add output file
+                break;
+            default: //if you get here you really broke something
+                cout << "How the heck did you get here?\n";
                 break;
         }
     }
