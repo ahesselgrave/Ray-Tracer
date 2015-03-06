@@ -22,6 +22,12 @@ struct Ray
     vec4 dir;
 };
 
+struct Sphere
+{
+    vec4 origin;
+    float r;
+};
+
 
 // TODO: add structs for spheres, lights and anything else you may need.
 
@@ -33,7 +39,11 @@ float g_top;
 float g_bottom;
 float g_near;
 
+//ambient light
+float amb_r, amb_g, amb_b;
 
+//output filename
+char file[21]; //20 character string with 1 null byte
 // -------------------------------------------------------------------
 // Input file parsing
 
@@ -56,8 +66,9 @@ float toFloat(const string& s)
 
 void parseLine(const vector<string>& vs)
 {
-    string input[11] = {"NEAR", "LEFT", "RIGHT", "BOTTOM", "TOP", "RES","SPHERE", "LIGHT", "BACK", "AMBIENT", "OUTPUT"};
-                       //  0       1       2         3       4      5       6      7        8        9          10
+    if (vs[0] == "") return; //ignore newlines
+    const string input[11] = {"NEAR", "LEFT", "RIGHT", "BOTTOM", "TOP", "RES","SPHERE", "LIGHT", "BACK", "AMBIENT", "OUTPUT"};
+                            //  0       1       2         3       4      5       6      7        8        9          10             
     map<string, int> Mapagrosenhr;
     for (int i = 0; i < 11; i++)
         Mapagrosenhr[input[i]] = i; //map the above strings to int
@@ -85,6 +96,7 @@ void parseLine(const vector<string>& vs)
                 break;
             case 6: // SPHERE
                 //TODO: add a sphere
+
                 break;
             case 7: // LIGHT
                 //TODO: add a light source
@@ -97,6 +109,15 @@ void parseLine(const vector<string>& vs)
                 break;
             case 10: // OUTPUT
                 //TODO: add output file
+                // cout << vs[1] << vs[1].size()<< endl;
+                if (vs[1].size() > 20) {
+                    cerr << "Error: filename must be 20 characters or less with no spaces\n";
+                    exit(1);
+                }
+                for(int i = 0; i < vs[1].size(); i++)
+                    file[i] = vs[1][i];
+                file[vs[1].size()] = '\0';
+                // cout << file << endl;
                 break;
             default: //if you get here you really broke something
                 cout << "How the heck did you get here?\n";
@@ -104,10 +125,10 @@ void parseLine(const vector<string>& vs)
         }
     }
     catch (const out_of_range& oor){
-        cout << "Error " << oor.what() <<": incorrect input file format\n";
+        // if (vs[0] == "\n" || vs[0] == "\r\n") return;
+        cout << "Error " << oor.what() << ": incorrect input file format with " << vs[0] << endl;
         exit(1);
     }
-
 }
 
 void loadFile(const char* filename)
@@ -158,6 +179,7 @@ void setColor(int ix, int iy, const vec4& color)
 vec4 trace(const Ray& ray)
 {
     // TODO: implement your ray tracing routine here.
+
     return vec4(0.0f, 0.0f, 0.0f, 1.0f);
 }
 
@@ -166,7 +188,11 @@ vec4 getDir(int ix, int iy)
     // TODO: modify this. This should return the direction from the origin
     // to pixel (ix, iy), normalized.
     vec4 dir;
-    dir = vec4(0.0f, 0.0f, -1.0f, 0.0f);
+    float x = g_left   + (ix / g_width)  * (g_right - g_left),
+          y = g_bottom + (iy / g_height) * (g_top - g_bottom),
+          z = g_near;
+    dir = vec4(x,y,z, 0.0f);
+    dir = normalize(dir);
     return dir;
 }
 
@@ -223,7 +249,7 @@ void saveFile()
                 buf[y*g_width*3+x*3+i] = (unsigned char)(((float*)g_colors[y*g_width+x])[i] * 255.9f);
     
     // TODO: change file name based on input file name.
-    savePPM(g_width, g_height, "output.ppm", buf);
+    savePPM(g_width, g_height, file, buf);
     delete[] buf;
 }
 

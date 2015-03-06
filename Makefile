@@ -8,13 +8,13 @@ SLIBS =
 LDFLAGS = 
 LDLIBS = -lstdc++ -lGL -lglut -lGLEW
 
-all: ray
+all: template-rt
 
 %.o: %.c* $(DEPS)
 	$(CC) $(CFLAGS) -c -o $@ $< 
 
-ray: $(OBJ) $(SLIBS)
+template-rt: $(OBJ) $(SLIBS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 clean:
-	rm -f $(OBJ) ray *~ *.ppm [#]*[#] .\#*
+	rm -f $(OBJ) template-rt *~ *.ppm [#]*[#] .\#*
