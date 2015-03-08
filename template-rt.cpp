@@ -10,7 +10,9 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <cassert>
 #include <map>
+#include <set>
 using namespace std;
 
 int g_width;
@@ -22,16 +24,41 @@ struct Ray
     vec4 dir;
 };
 
-struct Sphere
+struct Light
 {
-    vec4 origin;
-    float r;
+    float x,y,z,
+          ir,ig,ib;
 };
 
+struct Sphere
+{
+    mat4 transform;
+    mat4 inverse_transform;
+    vec3 colors;
+    float Ka, Kd, Ks, Kr, n;
+
+    Sphere(vec3 position, vec3 scale, vec3 color,float ambience,float chalkiness,float shininess,float reflection,float exponent) {
+        Ka = ambience;
+        Kd = chalkiness;
+        Ks = shininess;
+        Kr = reflection;
+        n  = exponent;
+
+        transform *= Translate(position.x, position.y, position.z);
+        transform *= Scale(scale.x, scale.y, scale.z);
+
+        if (!InvertMatrix(transform, inverse_transform)) { // no inverse? what do
+            cerr << "Can't invert, RETREATTT" << endl;
+            exit(2);
+        }
+    }
+};
 
 // TODO: add structs for spheres, lights and anything else you may need.
 
 vector<vec4> g_colors;
+set<Sphere> sphereSet;
+set<Light>  lightSet;
 
 float g_left;
 float g_right;
@@ -41,7 +68,8 @@ float g_near;
 
 //ambient light
 float amb_r, amb_g, amb_b;
-
+//background colors
+float back_r, back_g, back_b;
 //output filename
 char file[21]; //20 character string with 1 null byte
 // -------------------------------------------------------------------
@@ -96,13 +124,20 @@ void parseLine(const vector<string>& vs)
                 break;
             case 6: // SPHERE
                 //TODO: add a sphere
-
+                static int SphereCount = 0; // count how many spheres there are
+                assert(++SphereCount <= 5);
+                // sphereSet
                 break;
             case 7: // LIGHT
                 //TODO: add a light source
+                static int LightCount = 0; // count how many spheres there are
+                assert(++LightCount <= 5);
                 break;
             case 8: // BACK
-                //TODO: add a far plane (?)
+                //TODO: set background color
+                back_r = toFloat(vs[1]),
+                back_g = toFloat(vs[2]),
+                back_b = toFloat(vs[3]);
                 break;
             case 9: // AMBIENT
                 //TODO: add ambient light
@@ -171,16 +206,21 @@ void setColor(int ix, int iy, const vec4& color)
 // Intersection routine
 
 // TODO: add your ray-sphere intersection routine here.
-
+bool rayIntersectsSphere(const Ray& ray, Ray& newRay){
+    return false;
+}
 
 // -------------------------------------------------------------------
 // Ray tracing
 
 vec4 trace(const Ray& ray)
 {
-    // TODO: implement your ray tracing routine here.
-
-    return vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    Ray newRay;
+    // TODO: implement your ray tracing routine here
+    if (rayIntersectsSphere(ray, newRay))
+        return trace(newRay);
+    else
+        return vec4(back_r, back_g, back_b, 1.0f); //returns background color if no intersection
 }
 
 vec4 getDir(int ix, int iy)
@@ -188,9 +228,10 @@ vec4 getDir(int ix, int iy)
     // TODO: modify this. This should return the direction from the origin
     // to pixel (ix, iy), normalized.
     vec4 dir;
-    float x = g_left   + (ix / g_width)  * (g_right - g_left),
-          y = g_bottom + (iy / g_height) * (g_top - g_bottom),
+    float x = g_left   + (ix /(float)g_width)  * (g_right - g_left),
+          y = g_bottom + (iy /(float)g_height) * (g_top - g_bottom),
           z = g_near;
+    // fprintf(stderr, "Unnormalized Dir: %f %f %f\n", x, y, z);
     dir = vec4(x,y,z, 0.0f);
     dir = normalize(dir);
     return dir;
