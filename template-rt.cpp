@@ -11,6 +11,7 @@
 #include <vector>
 #include <cstdlib>
 #include <map>
+#include <cassert>
 using namespace std;
 
 int g_width;
@@ -24,14 +25,26 @@ struct Ray
 
 struct Sphere
 {
-    vec4 origin;
-    float r;
+    mat4 transform;
+    mat4 m_inverse;
+    float r, g, b;
+
+    //add lighting later
+    Sphere(float x, float y, float z, 
+           float sclx, float scly, float sclz,
+           float rr, float gg, float bb) : r(rr), g(gg), b(bb) { //add lighting later
+        transform = Translate(x,y,z);
+        transform *= Scale(sclx, scly, sclz);
+
+        assert(InvertMatrix(transform, m_inverse));
+    }
 };
 
 
 // TODO: add structs for spheres, lights and anything else you may need.
 
 vector<vec4> g_colors;
+vector<Sphere> g_spheres;
 
 float g_left;
 float g_right;
@@ -41,7 +54,8 @@ float g_near;
 
 //ambient light
 float amb_r, amb_g, amb_b;
-
+//background color
+float back_r, back_g, back_b;
 //output filename
 char file[21]; //20 character string with 1 null byte
 // -------------------------------------------------------------------
@@ -96,13 +110,19 @@ void parseLine(const vector<string>& vs)
                 break;
             case 6: // SPHERE
                 //TODO: add a sphere
-
+                assert(g_spheres.size() + 1 <= 5); //assert size limit
+                g_spheres.push_back( Sphere(toFloat(vs[2]), toFloat(vs[3]), toFloat(vs[4]), 
+                                            toFloat(vs[5]), toFloat(vs[6]), toFloat(vs[7]),
+                                            toFloat(vs[8]), toFloat(vs[9]), toFloat(vs[10])) );
+                
                 break;
             case 7: // LIGHT
                 //TODO: add a light source
                 break;
             case 8: // BACK
-                //TODO: add a far plane (?)
+                back_r = toFloat(vs[1]),
+                back_g = toFloat(vs[2]),
+                back_b = toFloat(vs[3]);
                 break;
             case 9: // AMBIENT
                 //TODO: add ambient light
@@ -180,7 +200,7 @@ vec4 trace(const Ray& ray)
 {
     // TODO: implement your ray tracing routine here.
 
-    return vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    return vec4(back_r, back_g, back_b, 1.0f);
 }
 
 vec4 getDir(int ix, int iy)
@@ -188,9 +208,9 @@ vec4 getDir(int ix, int iy)
     // TODO: modify this. This should return the direction from the origin
     // to pixel (ix, iy), normalized.
     vec4 dir;
-    float x = g_left   + (ix / g_width)  * (g_right - g_left),
-          y = g_bottom + (iy / g_height) * (g_top - g_bottom),
-          z = g_near;
+    float x = g_left   + (float)(ix / g_width)  * (g_right - g_left),
+          y = g_bottom + (float)(iy / g_height) * (g_top - g_bottom),
+          z = -g_near;
     dir = vec4(x,y,z, 0.0f);
     dir = normalize(dir);
     return dir;
@@ -267,5 +287,6 @@ int main(int argc, char* argv[])
     loadFile(argv[1]);
     render();
     saveFile();
+    cout << "Spheres: " << g_spheres.size() << endl;
 	return 0;
 }
