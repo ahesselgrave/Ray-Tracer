@@ -28,12 +28,16 @@ struct Sphere
     mat4 transform;
     mat4 m_inverse;
     float r, g, b;
+    float Ka, Kd, Ks, Kr, n;
 
     //add lighting later
     Sphere(float x, float y, float z, 
            float sclx, float scly, float sclz,
-           float rr, float gg, float bb) : r(rr), g(gg), b(bb) { //add lighting later
-        transform = Translate(x,y,z);
+           float rr, float gg, float bb,
+           float a, float d, float s,
+           float r, float nn) : r(rr), g(gg), b(bb), Ka(a), Kd(d), Ks(s), Kr(r), n(nn) {
+
+        transform  = Translate(x,y,z);
         transform *= Scale(sclx, scly, sclz);
 
         assert(InvertMatrix(transform, m_inverse));
@@ -113,8 +117,9 @@ void parseLine(const vector<string>& vs)
                 assert(g_spheres.size() + 1 <= 5); //assert size limit
                 g_spheres.push_back( Sphere(toFloat(vs[2]), toFloat(vs[3]), toFloat(vs[4]), 
                                             toFloat(vs[5]), toFloat(vs[6]), toFloat(vs[7]),
-                                            toFloat(vs[8]), toFloat(vs[9]), toFloat(vs[10])) );
-                
+                                            toFloat(vs[8]), toFloat(vs[9]), toFloat(vs[10]),
+                                            toFloat(vs[11]), toFloat(vs[12]), toFloat(vs[13]),
+                                            toFloat(vs[14]), toFloat(vs[15])) );
                 break;
             case 7: // LIGHT
                 //TODO: add a light source
@@ -128,8 +133,6 @@ void parseLine(const vector<string>& vs)
                 //TODO: add ambient light
                 break;
             case 10: // OUTPUT
-                //TODO: add output file
-                // cout << vs[1] << vs[1].size()<< endl;
                 if (vs[1].size() > 20) {
                     cerr << "Error: filename must be 20 characters or less with no spaces\n";
                     exit(1);
@@ -137,7 +140,6 @@ void parseLine(const vector<string>& vs)
                 for(int i = 0; i < vs[1].size(); i++)
                     file[i] = vs[1][i];
                 file[vs[1].size()] = '\0';
-                // cout << file << endl;
                 break;
             default: //if you get here you really broke something
                 cout << "How the heck did you get here?\n";
@@ -190,8 +192,41 @@ void setColor(int ix, int iy, const vec4& color)
 // -------------------------------------------------------------------
 // Intersection routine
 
-// TODO: add your ray-sphere intersection routine here.
+float posQuad(float A, float B, float C) {
+    return -B/A + std::sqrt(B*B-A*C) / A;
+}
 
+float negQuad(float A, float B, float C) {
+    return -B/A - std::sqrt(B*B-A*C) / A;
+}
+
+
+// TODO: add your ray-sphere intersection routine here.
+vec4 rayIntersectsSphere(const Ray& ray){
+    vec4 S = ray.origin, c = ray.dir;
+    for(int i = 0; i < g_spheres.size(); i++) {
+        float A = length(c) * length(c);
+        float B = dot(S, c);
+        float C = length(S) * length(S) - 1;
+        
+        float discriminant = B*B - A*C;
+        if (discriminant < 0) continue;
+        else {
+            float pos_t = posQuad(A,B,C);
+            float neg_t = negQuad(A,B,C);
+
+            float t_h = pos_t < neg_t ? pos_t : neg_t; //assign to lowest t
+            printf("Sphere %d: t_h is %f", i, t_h);
+            if (t_h <= 1) continue;
+            else{
+                return vec4(g_spheres[i].r * g_spheres[i].Ka, 
+                            g_spheres[i].g * g_spheres[i].Ka, 
+                            g_spheres[i].b * g_spheres[i].Ka, 1.0f);
+            }
+        }
+    }
+    return vec4(back_r, back_g, back_b, 1.0f);
+}
 
 // -------------------------------------------------------------------
 // Ray tracing
@@ -199,7 +234,7 @@ void setColor(int ix, int iy, const vec4& color)
 vec4 trace(const Ray& ray)
 {
     // TODO: implement your ray tracing routine here.
-
+    return rayIntersectsSphere(ray);
     return vec4(back_r, back_g, back_b, 1.0f);
 }
 
