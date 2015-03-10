@@ -205,10 +205,18 @@ float negQuad(float A, float B, float C) {
 vec4 rayIntersectsSphere(const Ray& ray){
     vec4 S = ray.origin, c = ray.dir;
     for(int i = 0; i < g_spheres.size(); i++) {
-        float A = length(c) * length(c);
-        float B = dot(S, c);
-        float C = length(S) * length(S) - 1;
-        
+        //initialize vec3 untransformed spheres
+        vec4 S_prime4 = g_spheres[i].m_inverse * S;
+        vec3 S_prime3(S_prime4.x, S_prime4.y, S_prime4.z);
+
+        vec4 c_prime4 = g_spheres[i].m_inverse * c;
+        vec3 c_prime3(c_prime4.x, c_prime4.y, c_prime4.z);
+
+
+        float A = dot(c_prime3, c_prime3);
+        float B = dot(S_prime3, c_prime3);
+        float C = dot(S_prime3, S_prime3)- 1;
+
         float discriminant = B*B - A*C;
         if (discriminant < 0) continue;
         else {
@@ -216,7 +224,7 @@ vec4 rayIntersectsSphere(const Ray& ray){
             float neg_t = negQuad(A,B,C);
 
             float t_h = pos_t < neg_t ? pos_t : neg_t; //assign to lowest t
-            printf("Sphere %d: t_h is %f", i, t_h);
+            // fprintf(stderr,"Sphere %d: t_h is %f", i, t_h);
             if (t_h <= 1) continue;
             else{
                 return vec4(g_spheres[i].r * g_spheres[i].Ka, 
@@ -225,6 +233,7 @@ vec4 rayIntersectsSphere(const Ray& ray){
             }
         }
     }
+    //if it intersects with no spheres, return background color
     return vec4(back_r, back_g, back_b, 1.0f);
 }
 
@@ -243,8 +252,8 @@ vec4 getDir(int ix, int iy)
     // TODO: modify this. This should return the direction from the origin
     // to pixel (ix, iy), normalized.
     vec4 dir;
-    float x = g_left   + (float)(ix / g_width)  * (g_right - g_left),
-          y = g_bottom + (float)(iy / g_height) * (g_top - g_bottom),
+    float x = g_left   + ((float)ix / (float)g_width)  * (g_right - g_left),
+          y = g_bottom + ((float)iy / (float)g_height) * (g_top - g_bottom),
           z = -g_near;
     dir = vec4(x,y,z, 0.0f);
     dir = normalize(dir);
