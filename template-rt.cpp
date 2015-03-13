@@ -44,11 +44,20 @@ struct Sphere
     }
 };
 
+struct Light
+{
+    float Ir, Ig, Ib; //intensities
+    vec4 pos;
 
-// TODO: add structs for spheres, lights and anything else you may need.
+    Light(float x, float y, float z,
+          float Ir, float Ig, float Ib) : Ir(Ir), Ig(Ig), Ib(Ib) {
+        pos = vec4(x, y, z, 1.0f);
+    }
+};
 
 vector<vec4> g_colors;
 vector<Sphere> g_spheres;
+vector<Light> g_lights;
 
 float g_left;
 float g_right;
@@ -62,6 +71,8 @@ float amb_r, amb_g, amb_b;
 float back_r, back_g, back_b;
 //output filename
 char file[21]; //20 character string with 1 null byte
+//zero vector
+const vec4 zeroVec = vec4(0.0f, 0.0f, 0.0f, 0.0f);
 // -------------------------------------------------------------------
 // Input file parsing
 
@@ -122,7 +133,9 @@ void parseLine(const vector<string>& vs)
                                             toFloat(vs[14]), toFloat(vs[15])) );
                 break;
             case 7: // LIGHT
-                //TODO: add a light source
+                assert(g_lights.size() + 1 <= 5); //assert size limit
+                g_lights.push_back( Light(toFloat(vs[2]), toFloat(vs[3]), toFloat(vs[4]),
+                                          toFloat(vs[5]), toFloat(vs[6]), toFloat(vs[7])) );
                 break;
             case 8: // BACK
                 back_r = toFloat(vs[1]),
@@ -130,7 +143,9 @@ void parseLine(const vector<string>& vs)
                 back_b = toFloat(vs[3]);
                 break;
             case 9: // AMBIENT
-                //TODO: add ambient light
+                amb_r = toFloat(vs[1]),
+                amb_g = toFloat(vs[2]),
+                amb_b = toFloat(vs[3]);
                 break;
             case 10: // OUTPUT
                 if (vs[1].size() > 20) {
@@ -202,8 +217,12 @@ float negQuad(float A, float B, float C) {
 
 
 // TODO: add your ray-sphere intersection routine here.
-vec4 rayIntersectsSphere(const Ray& ray){
+vec4 lightContribution(const Ray& ray, const vec4& N, 
+                       const vec4& hitpoint, const int& sphereNum);
+
+vec4 rayIntersectsSphere(const Ray& ray, int recursionLevel) {
     vec4 S = ray.origin, c = ray.dir;
+    vector<float> t_hVec; //store all t_h values
     for(int i = 0; i < g_spheres.size(); i++) {
         //initialize vec3 untransformed spheres
         vec4 S_prime4 = g_spheres[i].m_inverse * S;
@@ -224,17 +243,65 @@ vec4 rayIntersectsSphere(const Ray& ray){
             float neg_t = negQuad(A,B,C);
 
             float t_h = pos_t < neg_t ? pos_t : neg_t; //assign to lowest t
-            // fprintf(stderr,"Sphere %d: t_h is %f", i, t_h);
-            if (t_h <= 1) continue;
-            else{
-                return vec4(g_spheres[i].r * g_spheres[i].Ka, 
-                            g_spheres[i].g * g_spheres[i].Ka, 
-                            g_spheres[i].b * g_spheres[i].Ka, 1.0f);
+            if (t_h <= 1) t_hVec.push_back(0); //we will ignore all 0 values
+            else t_hVec.push_back(t_h);
+            {
+                //color starts out as sphere color * ambient
+                vec4 color = vec4(g_spheres[i].r * g_spheres[i].Ka, 
+                                  g_spheres[i].g * g_spheres[i].Ka, 
+                                  g_spheres[i].b * g_spheres[i].Ka, 1.0f);
+                //add color from light sources
+                //first get normal vector
+                vec4 hitpoint = S + t_h * c;
+                vec4 unitHitpoint = S_prime4 + t_h * c_prime4;
+                vec4 normal = vec4(unitHitpoint.x, unitHitpoint.y, unitHitpoint.z, 0.0f);
+                vec4 trans_normal = transpose(g_spheres[i].m_inverse) * normal;
+                trans_normal = normalize(trans_normal);
+
+                color += lightContribution(ray, trans_normal, hitpoint, i);
+                return color;
             }
         }
     }
     //if it intersects with no spheres, return background color
     return vec4(back_r, back_g, back_b, 1.0f);
+}
+
+vec4 lightContribution(const Ray& ray, const vec4& N, const vec4& hitpoint, const int& sphereNum) {
+    //assume N is normalized
+    vec4 color = zeroVec; //initialize color contribution as empty
+    for (int i = 0; i < g_lights.size(); i++) {
+        Light light = g_lights[i]; //easier access
+
+        vec4 L = light.pos - hitpoint;
+        L = normalize(L);
+
+        vec4 R = ((2 * N) * dot(N,L)) - L;
+        R = normalize(R);
+
+        //diffuse
+        float cosDifAngle = dot(N,L);
+        // if (cosDifAngle )
+        vec4 diffuse = vec4(light.Ir*g_spheres[sphereNum].Kd*cosDifAngle,
+                            light.Ig*g_spheres[sphereNum].Kd*cosDifAngle,
+                            light.Ib*g_spheres[sphereNum].Kd*cosDifAngle, 1.0f);
+        color += diffuse;
+
+        //specular
+        vec4 v = ray.dir;
+        float cosnSpecAngle = dot(R,v);
+        cosnSpecAngle = pow(cosnSpecAngle, g_spheres[i].n);
+        vec4 specular = vec4(light.Ir*g_spheres[sphereNum].Ks*cosnSpecAngle,
+                             light.Ig*g_spheres[sphereNum].Ks*cosnSpecAngle,
+                             light.Ib*g_spheres[sphereNum].Ks*cosnSpecAngle, 1.0f);
+        color += specular;
+    }
+    //ambient
+    vec4 ambient = vec4(amb_r, amb_g, amb_b, 1.0f);
+    ambient *= g_spheres[sphereNum].Ka;
+    color += ambient;
+    color.w = 1.0f;
+    return color;
 }
 
 // -------------------------------------------------------------------
@@ -243,7 +310,7 @@ vec4 rayIntersectsSphere(const Ray& ray){
 vec4 trace(const Ray& ray)
 {
     // TODO: implement your ray tracing routine here.
-    return rayIntersectsSphere(ray);
+    return rayIntersectsSphere(ray, 1);
     return vec4(back_r, back_g, back_b, 1.0f);
 }
 
@@ -307,12 +374,18 @@ void saveFile()
     // Convert color components from floats to unsigned chars.
     // TODO: clamp values if out of range.
     unsigned char* buf = new unsigned char[g_width * g_height * 3];
+    for (int i = 0; i < g_colors.size(); i++){
+        for (int j = 0; j < 3; j++){
+            if (g_colors[i][j] < 0.0f) g_colors[i][j] = 0.0f;
+            else if (g_colors[i][j] > 1.0f) g_colors[i][j] = 1.0f;
+            else continue;
+        }
+    }
     for (int y = 0; y < g_height; y++)
         for (int x = 0; x < g_width; x++)
             for (int i = 0; i < 3; i++)
                 buf[y*g_width*3+x*3+i] = (unsigned char)(((float*)g_colors[y*g_width+x])[i] * 255.9f);
     
-    // TODO: change file name based on input file name.
     savePPM(g_width, g_height, file, buf);
     delete[] buf;
 }
@@ -331,6 +404,5 @@ int main(int argc, char* argv[])
     loadFile(argv[1]);
     render();
     saveFile();
-    cout << "Spheres: " << g_spheres.size() << endl;
 	return 0;
 }
