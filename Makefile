@@ -18,7 +18,3 @@ template-rt: $(OBJ) $(SLIBS)
 
 clean:
 	rm -f $(OBJ) template-rt *~ *.ppm [#]*[#] .\#*
-
-test:
-	make; for test in `ls test\ files | grep txt`; do \
-	./template-rt $(test); done
