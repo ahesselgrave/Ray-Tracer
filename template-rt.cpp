@@ -209,111 +209,13 @@ void setColor(int ix, int iy, const vec4& color)
 
 // -------------------------------------------------------------------
 // Intersection routine
-
-float posQuad(float A, float B, float C) {
-    return -B/A + std::sqrt(B*B-A*C) / A;
+inline float posQuad(float A, float B, float D){
+    return -B/A + sqrt(D)/A;
 }
 
-float negQuad(float A, float B, float C) {
-    return -B/A - std::sqrt(B*B-A*C) / A;
+inline float negQuad(float A, float B, float D){
+    return -B/A - sqrt(D)/A;
 }
-
-vec4 lightContribution(const Ray& ray, const vec4& N, const vec4& hitpoint, const int& sphereNum) {
-    //assume N is normalized
-    vec4 color = zeroVec; //initialize color contribution as empty
-    for (int i = 0; i < g_lights.size(); i++) {
-        Light light = g_lights[i]; //easier access
-
-        vec4 L = light.pos - hitpoint;
-        L = normalize(L);
-
-        vec4 R = ((2 * N) * dot(N,L)) - L;
-        R = normalize(R);
-
-        //diffuse
-        float cosDifAngle = dot(N,L);
-        vec4 diffuse = vec4(light.Ir*g_spheres[sphereNum].Kd*cosDifAngle,
-                            light.Ig*g_spheres[sphereNum].Kd*cosDifAngle,
-                            light.Ib*g_spheres[sphereNum].Kd*cosDifAngle, 1.0f);
-        color += diffuse;
-
-        //specular
-        vec4 v = ray.dir;
-        float cosnSpecAngle = dot(R,v);
-        cosnSpecAngle = pow(cosnSpecAngle, g_spheres[i].n);
-        vec4 specular = vec4(light.Ir*g_spheres[sphereNum].Ks*cosnSpecAngle,
-                             light.Ig*g_spheres[sphereNum].Ks*cosnSpecAngle,
-                             light.Ib*g_spheres[sphereNum].Ks*cosnSpecAngle, 1.0f);
-        color += specular;
-    }
-    //ambient
-    vec4 ambient = vec4(amb_r, amb_g, amb_b, 1.0f);
-    ambient *= g_spheres[sphereNum].Ka;
-    color += ambient;
-    color.w = 1.0f;
-    return color;
-}
-
-struct Hitpoint{
-    float i, t;
-    Hitpoint(float ii, float tt) : i(ii), t(tt) {}
-
-    bool operator<(Hitpoint A, Hitpoint B) { return A.t < B.t;}
-};
-
-vec4 rayIntersectsSphere(const Ray& ray) {
-
-    vec4 S = ray.origin, c = ray.dir;
-    vector<Hitpoint> t_hVec; //store all t_h and sphere values
-    for(int i = 0; i < g_spheres.size(); i++) {
-        //initialize vec3 untransformed spheres
-        vec4 S_prime4 = g_spheres[i].m_inverse * S;
-        vec3 S_prime3(S_prime4.x, S_prime4.y, S_prime4.z);
-
-        vec4 c_prime4 = g_spheres[i].m_inverse * c;
-        vec3 c_prime3(c_prime4.x, c_prime4.y, c_prime4.z);
-
-
-        float A = dot(c_prime3, c_prime3);
-        float B = dot(S_prime3, c_prime3);
-        float C = dot(S_prime3, S_prime3)- 1;
-
-        float discriminant = B*B - A*C;
-        if (discriminant < 0) continue;
-        else {
-            float pos_t = posQuad(A,B,C);
-            float neg_t = negQuad(A,B,C);
-
-            float t_h = pos_t < neg_t ? pos_t : neg_t; //assign to lowest t
-
-            if (t_h > 1) 
-                t_hVec.push_back(Hitpoint(i, t_h));
-        }
-    }
-    //Sort t_hVec and get the smallest one.
-    if (t_hVec.size() == 0) //no intersect points
-        return zeroVec;
-
-    sort(t_hVec.begin(), t_hVec.end());
-    float smalltH = t_hVec[0].t;
-    //color starts out as sphere color * ambient
-    int i = t_hVec[0].i;
-    vec4 color = vec4(g_spheres[i].r, 
-                      g_spheres[i].g, 
-                      g_spheres[i].b, 1.0f);
-    //add color from light sources
-    //first get normal vector
-/*    vec4 hitpoint = S + t_h * c;
-    vec4 unitHitpoint = S_prime4 + t_h * c_prime4;
-    vec4 normal = vec4(unitHitpoint.x, unitHitpoint.y, unitHitpoint.z, 0.0f);
-    vec4 trans_normal = transpose(g_spheres[i].m_inverse) * normal;
-    trans_normal = normalize(trans_normal);
-
-    color += lightContribution(ray, trans_normal, hitpoint, i);*/
-    return color;
-
-}
-
 
 
 // -------------------------------------------------------------------
@@ -321,8 +223,39 @@ vec4 rayIntersectsSphere(const Ray& ray) {
 
 vec4 trace(const Ray& ray)
 {
-    // TODO: implement your ray tracing routine here.
-    return rayIntersectsSphere(ray);
+    vec4 S = ray.origin, c = ray.dir;
+    map<float, int> sphereMap;
+    for (int i = 0; i < g_spheres.size(); i++){ //for every sphere
+        vec4 S_prime4 = g_spheres[i].m_inverse * S;
+        vec4 S_prime3 = vec3(S_prime4.x, S_prime4.y, S_prime4.z);
+
+        vec4 c_prime4 = g_spheres[i].m_inverse * S;
+        vec4 c_prime3 = vec3(c_prime4.x, c_prime4.y, c_prime4.z);
+
+        //find th
+        float A = dot(c_prime3, c_prime3),     //|c|^2
+              B = dot(S_prime3, c_prime3),     //S . c
+              C = dot(S_prime3, S_prime3) - 1; //|S|^2 - 1
+        float D = B*B - A*C; //discriminant
+        if (D < 0) continue; //move along, no intersection here
+        float th1 = posQuad(A, B, D),
+              th2 = negQuad(A, B, D);
+        float th  = th1 < th2 ? th1 : th2;
+        if (th <= 1) continue;
+        //alright, if we got this far we have a valid intersection point
+        //put it in the map
+        sphereMap[th] = i;
+    }
+    //maps are default sorted, so first element should be first sphere
+    if (sphereMap.size() == 0) //no intersection
+        return vec4(back_r, back_g, back_b, 1.0f);
+    map<float, int>::iterator iter = sphereMap.begin();
+    float th = iter->first;
+    int i = iter->second;
+    vec4 color = vec4(g_spheres[i].r, g_spheres[i].g,
+                      g_spheres[i].b, 1.0f);
+    //insert lighting here
+    return color;
 }
 
 vec4 getDir(int ix, int iy)

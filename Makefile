@@ -1,6 +1,6 @@
 CC=g++
 
-CFLAGS = -std=c++11 -g -O3
+CFLAGS = -std=c++11 -g -O0
 
 DEPS = template-rt.cpp
 OBJ = template-rt.o 
