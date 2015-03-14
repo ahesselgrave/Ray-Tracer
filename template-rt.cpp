@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <map>
 #include <cassert>
+#include <algorithm>
 using namespace std;
 
 int g_width;
@@ -73,6 +74,7 @@ float back_r, back_g, back_b;
 char file[21]; //20 character string with 1 null byte
 //zero vector
 const vec4 zeroVec = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+const vec4 zeroPoint = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 // -------------------------------------------------------------------
 // Input file parsing
 
@@ -158,6 +160,7 @@ void parseLine(const vector<string>& vs)
                 break;
             default: //if you get here you really broke something
                 cout << "How the heck did you get here?\n";
+                exit(1);
                 break;
         }
     }
@@ -215,58 +218,6 @@ float negQuad(float A, float B, float C) {
     return -B/A - std::sqrt(B*B-A*C) / A;
 }
 
-
-// TODO: add your ray-sphere intersection routine here.
-vec4 lightContribution(const Ray& ray, const vec4& N, 
-                       const vec4& hitpoint, const int& sphereNum);
-
-vec4 rayIntersectsSphere(const Ray& ray, int recursionLevel) {
-    vec4 S = ray.origin, c = ray.dir;
-    vector<float> t_hVec; //store all t_h values
-    for(int i = 0; i < g_spheres.size(); i++) {
-        //initialize vec3 untransformed spheres
-        vec4 S_prime4 = g_spheres[i].m_inverse * S;
-        vec3 S_prime3(S_prime4.x, S_prime4.y, S_prime4.z);
-
-        vec4 c_prime4 = g_spheres[i].m_inverse * c;
-        vec3 c_prime3(c_prime4.x, c_prime4.y, c_prime4.z);
-
-
-        float A = dot(c_prime3, c_prime3);
-        float B = dot(S_prime3, c_prime3);
-        float C = dot(S_prime3, S_prime3)- 1;
-
-        float discriminant = B*B - A*C;
-        if (discriminant < 0) continue;
-        else {
-            float pos_t = posQuad(A,B,C);
-            float neg_t = negQuad(A,B,C);
-
-            float t_h = pos_t < neg_t ? pos_t : neg_t; //assign to lowest t
-            if (t_h <= 1) t_hVec.push_back(0); //we will ignore all 0 values
-            else t_hVec.push_back(t_h);
-            {
-                //color starts out as sphere color * ambient
-                vec4 color = vec4(g_spheres[i].r * g_spheres[i].Ka, 
-                                  g_spheres[i].g * g_spheres[i].Ka, 
-                                  g_spheres[i].b * g_spheres[i].Ka, 1.0f);
-                //add color from light sources
-                //first get normal vector
-                vec4 hitpoint = S + t_h * c;
-                vec4 unitHitpoint = S_prime4 + t_h * c_prime4;
-                vec4 normal = vec4(unitHitpoint.x, unitHitpoint.y, unitHitpoint.z, 0.0f);
-                vec4 trans_normal = transpose(g_spheres[i].m_inverse) * normal;
-                trans_normal = normalize(trans_normal);
-
-                color += lightContribution(ray, trans_normal, hitpoint, i);
-                return color;
-            }
-        }
-    }
-    //if it intersects with no spheres, return background color
-    return vec4(back_r, back_g, back_b, 1.0f);
-}
-
 vec4 lightContribution(const Ray& ray, const vec4& N, const vec4& hitpoint, const int& sphereNum) {
     //assume N is normalized
     vec4 color = zeroVec; //initialize color contribution as empty
@@ -281,7 +232,6 @@ vec4 lightContribution(const Ray& ray, const vec4& N, const vec4& hitpoint, cons
 
         //diffuse
         float cosDifAngle = dot(N,L);
-        // if (cosDifAngle )
         vec4 diffuse = vec4(light.Ir*g_spheres[sphereNum].Kd*cosDifAngle,
                             light.Ig*g_spheres[sphereNum].Kd*cosDifAngle,
                             light.Ib*g_spheres[sphereNum].Kd*cosDifAngle, 1.0f);
@@ -304,14 +254,75 @@ vec4 lightContribution(const Ray& ray, const vec4& N, const vec4& hitpoint, cons
     return color;
 }
 
+struct Hitpoint{
+    float i, t;
+    Hitpoint(float ii, float tt) : i(ii), t(tt) {}
+
+    bool operator<(Hitpoint A, Hitpoint B) { return A.t < B.t;}
+};
+
+vec4 rayIntersectsSphere(const Ray& ray) {
+
+    vec4 S = ray.origin, c = ray.dir;
+    vector<Hitpoint> t_hVec; //store all t_h and sphere values
+    for(int i = 0; i < g_spheres.size(); i++) {
+        //initialize vec3 untransformed spheres
+        vec4 S_prime4 = g_spheres[i].m_inverse * S;
+        vec3 S_prime3(S_prime4.x, S_prime4.y, S_prime4.z);
+
+        vec4 c_prime4 = g_spheres[i].m_inverse * c;
+        vec3 c_prime3(c_prime4.x, c_prime4.y, c_prime4.z);
+
+
+        float A = dot(c_prime3, c_prime3);
+        float B = dot(S_prime3, c_prime3);
+        float C = dot(S_prime3, S_prime3)- 1;
+
+        float discriminant = B*B - A*C;
+        if (discriminant < 0) continue;
+        else {
+            float pos_t = posQuad(A,B,C);
+            float neg_t = negQuad(A,B,C);
+
+            float t_h = pos_t < neg_t ? pos_t : neg_t; //assign to lowest t
+
+            if (t_h > 1) 
+                t_hVec.push_back(Hitpoint(i, t_h));
+        }
+    }
+    //Sort t_hVec and get the smallest one.
+    if (t_hVec.size() == 0) //no intersect points
+        return zeroVec;
+
+    sort(t_hVec.begin(), t_hVec.end());
+    float smalltH = t_hVec[0].t;
+    //color starts out as sphere color * ambient
+    int i = t_hVec[0].i;
+    vec4 color = vec4(g_spheres[i].r, 
+                      g_spheres[i].g, 
+                      g_spheres[i].b, 1.0f);
+    //add color from light sources
+    //first get normal vector
+/*    vec4 hitpoint = S + t_h * c;
+    vec4 unitHitpoint = S_prime4 + t_h * c_prime4;
+    vec4 normal = vec4(unitHitpoint.x, unitHitpoint.y, unitHitpoint.z, 0.0f);
+    vec4 trans_normal = transpose(g_spheres[i].m_inverse) * normal;
+    trans_normal = normalize(trans_normal);
+
+    color += lightContribution(ray, trans_normal, hitpoint, i);*/
+    return color;
+
+}
+
+
+
 // -------------------------------------------------------------------
 // Ray tracing
 
 vec4 trace(const Ray& ray)
 {
     // TODO: implement your ray tracing routine here.
-    return rayIntersectsSphere(ray, 1);
-    return vec4(back_r, back_g, back_b, 1.0f);
+    return rayIntersectsSphere(ray);
 }
 
 vec4 getDir(int ix, int iy)
