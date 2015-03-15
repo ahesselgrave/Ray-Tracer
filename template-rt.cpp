@@ -209,7 +209,7 @@ void setColor(int ix, int iy, const vec4& color)
 
 // -------------------------------------------------------------------
 // Intersection routine
-inline float posQuad(float A, float B, float D){
+inline float posQuad(float A, float B, float D) {
     return -B/A + sqrt(D)/A;
 }
 
@@ -217,20 +217,103 @@ inline float negQuad(float A, float B, float D){
     return -B/A - sqrt(D)/A;
 }
 
+vec4 lightContribution(const vec4& P, const vec4& nn, int k, const Ray& ray) {
+    //find L, r, v
+    vec4 baseColor = vec4(g_spheres[k].r, g_spheres[k].g, g_spheres[k].b, 1.0f);
+    float Ka = g_spheres[k].Ka;   
+    float Kd = g_spheres[k].Kd;
+    float Ks = g_spheres[k].Ks;
+    vec4 color = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    vec3 n = vec3(nn.x, nn.y, nn.z);
+    n = normalize(n);
+
+    for (int i = 0; i < g_lights.size(); i++){
+        //check for shadows first
+        vec4 S = P;
+        vec4 c = g_lights[i].pos - P;
+        // c = normalize(c);
+        bool shadowExists = false;
+        for (int j = 0; j < g_spheres.size(); j++){ //for every sphere
+            vec4 S_prime4 = g_spheres[j].m_inverse * S;
+            vec3 S_prime3 = vec3(S_prime4.x, S_prime4.y, S_prime4.z);
+
+            vec4 c_prime4 = g_spheres[j].m_inverse * c;
+            vec3 c_prime3 = vec3(c_prime4.x, c_prime4.y, c_prime4.z);
+
+            //find th
+            float A = dot(c_prime3, c_prime3),     //|c|^2
+                  B = dot(S_prime3, c_prime3),     //S . c
+                  C = dot(S_prime3, S_prime3) - 1; //|S|^2 - 1
+            float D = B*B - A*C; //discriminant
+            if (D < 0) continue; //move along, no intersection here
+            float th1 = posQuad(A, B, D),
+                  th2 = negQuad(A, B, D);
+            if ((th1 > 0.001 && th1 < 1) || (th2 > 0.001 && th2 < 1)) {
+                shadowExists = true;
+                break;
+            }
+        }
+        if (!shadowExists) {
+            vec4 LL = g_lights[i].pos - P;
+            vec3 L = vec3(LL.x, LL.y, LL.z);
+            L = normalize(L);
+    
+            vec3 r = (2*dot(n,L) * n) - L;
+            r = normalize(r);
+         
+            vec4 vv = ray.origin - P;
+            vec3 v = vec3(vv.x, vv.y, vv.z);
+            v = normalize(v);
+    
+            float Ir = g_lights[i].Ir,
+                  Ig = g_lights[i].Ig,
+                  Ib = g_lights[i].Ib;
+    
+            //diffuse
+            float cosDifAngle = dot(n,L);
+            vec4 diffuse = zeroPoint, specular = zeroPoint;
+            if (cosDifAngle < 0)
+                diffuse = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            else {
+                diffuse = vec4(Kd * Ir * cosDifAngle * baseColor.x,
+                               Kd * Ig * cosDifAngle * baseColor.y,
+                               Kd * Ib * cosDifAngle * baseColor.z, 1.0f);
+                //specular
+                if (dot(r,v) < 0)
+                    specular = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+                else {
+                    double cosnSpecAngle = pow(dot(r,v), g_spheres[k].n);
+                    specular = vec4(Ks * Ir * cosnSpecAngle,
+                                    Ks * Ig * cosnSpecAngle,
+                                    Ks * Ib * cosnSpecAngle, 1.0f);
+                }
+            }   
+            color += (diffuse + specular);
+        }
+    }
+    //ambient
+    vec4 ambient(amb_r * Ka * baseColor.x,
+                 amb_g * Ka * baseColor.y,
+                 amb_b * Ka * baseColor.z, 1.0f);
+
+    color += ambient;
+    color.w = 1.0f;
+    return color;
+}
 
 // -------------------------------------------------------------------
 // Ray tracing
 
-vec4 trace(const Ray& ray)
+vec4 trace(const Ray& ray, int depth)
 {
     vec4 S = ray.origin, c = ray.dir;
     map<float, int> sphereMap;
     for (int i = 0; i < g_spheres.size(); i++){ //for every sphere
         vec4 S_prime4 = g_spheres[i].m_inverse * S;
-        vec4 S_prime3 = vec3(S_prime4.x, S_prime4.y, S_prime4.z);
+        vec3 S_prime3 = vec3(S_prime4.x, S_prime4.y, S_prime4.z);
 
-        vec4 c_prime4 = g_spheres[i].m_inverse * S;
-        vec4 c_prime3 = vec3(c_prime4.x, c_prime4.y, c_prime4.z);
+        vec4 c_prime4 = g_spheres[i].m_inverse * c;
+        vec3 c_prime3 = vec3(c_prime4.x, c_prime4.y, c_prime4.z);
 
         //find th
         float A = dot(c_prime3, c_prime3),     //|c|^2
@@ -241,10 +324,8 @@ vec4 trace(const Ray& ray)
         float th1 = posQuad(A, B, D),
               th2 = negQuad(A, B, D);
         float th  = th1 < th2 ? th1 : th2;
-        if (th <= 1) continue;
-        //alright, if we got this far we have a valid intersection point
-        //put it in the map
-        sphereMap[th] = i;
+        if (th > 1)
+            sphereMap[th] = i;
     }
     //maps are default sorted, so first element should be first sphere
     if (sphereMap.size() == 0) //no intersection
@@ -252,16 +333,24 @@ vec4 trace(const Ray& ray)
     map<float, int>::iterator iter = sphereMap.begin();
     float th = iter->first;
     int i = iter->second;
-    vec4 color = vec4(g_spheres[i].r, g_spheres[i].g,
-                      g_spheres[i].b, 1.0f);
+
     //insert lighting here
+    vec4 P = S + (c * th); //sphere hitpoint
+    vec4 S_prime4 = g_spheres[i].m_inverse * S;
+    vec4 c_prime4 = g_spheres[i].m_inverse * c;
+
+    vec4 N = S_prime4 + (c_prime4 * th); //unit sphere hitpoint
+    N.w = 0.0f; //now normal vec
+    N = transpose(g_spheres[i].m_inverse)*N; //M^-t * N 
+    N = normalize(N);
+
+    vec4 color = lightContribution(P, N, i, ray);
+
     return color;
 }
 
 vec4 getDir(int ix, int iy)
 {
-    // TODO: modify this. This should return the direction from the origin
-    // to pixel (ix, iy), normalized.
     vec4 dir;
     float x = g_left   + ((float)ix / (float)g_width)  * (g_right - g_left),
           y = g_bottom + ((float)iy / (float)g_height) * (g_top - g_bottom),
@@ -276,7 +365,7 @@ void renderPixel(int ix, int iy)
     Ray ray;
     ray.origin = vec4(0.0f, 0.0f, 0.0f, 1.0f);
     ray.dir = getDir(ix, iy);
-    vec4 color = trace(ray);
+    vec4 color = trace(ray, 0);
     setColor(ix, iy, color);
 }
 
