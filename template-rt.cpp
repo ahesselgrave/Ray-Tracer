@@ -74,7 +74,7 @@ float back_r, back_g, back_b;
 char file[21]; //20 character string with 1 null byte
 //zero vector
 const vec4 zeroVec = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-const vec4 zeroPoint = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+const vec4 black = vec4(0.0f, 0.0f, 0.0f, 1.0f);
 // -------------------------------------------------------------------
 // Input file parsing
 
@@ -231,7 +231,6 @@ vec4 lightContribution(const vec4& P, const vec4& nn, int k, const Ray& ray) {
         //check for shadows first
         vec4 S = P;
         vec4 c = g_lights[i].pos - P;
-        // c = normalize(c);
         bool shadowExists = false;
         for (int j = 0; j < g_spheres.size(); j++){ //for every sphere
             vec4 S_prime4 = g_spheres[j].m_inverse * S;
@@ -248,7 +247,7 @@ vec4 lightContribution(const vec4& P, const vec4& nn, int k, const Ray& ray) {
             if (D < 0) continue; //move along, no intersection here
             float th1 = posQuad(A, B, D),
                   th2 = negQuad(A, B, D);
-            if ((th1 > 0.001 && th1 < 1) || (th2 > 0.001 && th2 < 1)) {
+            if ((th1 > 0.0001 && th1 < 1) || (th2 > 0.001 && th2 < 1)) {
                 shadowExists = true;
                 break;
             }
@@ -271,7 +270,7 @@ vec4 lightContribution(const vec4& P, const vec4& nn, int k, const Ray& ray) {
     
             //diffuse
             float cosDifAngle = dot(n,L);
-            vec4 diffuse = zeroPoint, specular = zeroPoint;
+            vec4 diffuse = black, specular = black;
             if (cosDifAngle < 0)
                 diffuse = vec4(0.0f, 0.0f, 0.0f, 1.0f);
             else {
@@ -291,13 +290,6 @@ vec4 lightContribution(const vec4& P, const vec4& nn, int k, const Ray& ray) {
             color += (diffuse + specular);
         }
     }
-    //ambient
-    vec4 ambient(amb_r * Ka * baseColor.x,
-                 amb_g * Ka * baseColor.y,
-                 amb_b * Ka * baseColor.z, 1.0f);
-
-    color += ambient;
-    color.w = 1.0f;
     return color;
 }
 
@@ -306,6 +298,8 @@ vec4 lightContribution(const vec4& P, const vec4& nn, int k, const Ray& ray) {
 
 vec4 trace(const Ray& ray, int depth)
 {
+    if (depth > 3) return black; //base case
+
     vec4 S = ray.origin, c = ray.dir;
     map<float, int> sphereMap;
     for (int i = 0; i < g_spheres.size(); i++){ //for every sphere
@@ -328,8 +322,15 @@ vec4 trace(const Ray& ray, int depth)
             sphereMap[th] = i;
     }
     //maps are default sorted, so first element should be first sphere
-    if (sphereMap.size() == 0) //no intersection
-        return vec4(back_r, back_g, back_b, 1.0f);
+    if (sphereMap.size() == 0) { //no intersection
+        if(depth == 0)
+            return vec4(back_r, back_g, back_b, 1.0f);
+        else 
+        {
+            cerr << "Depth " <<depth<<" and no hits!" << endl;
+            return black;
+        }
+    }
     map<float, int>::iterator iter = sphereMap.begin();
     float th = iter->first;
     int i = iter->second;
@@ -344,8 +345,24 @@ vec4 trace(const Ray& ray, int depth)
     N = transpose(g_spheres[i].m_inverse)*N; //M^-t * N 
     N = normalize(N);
 
-    vec4 color = lightContribution(P, N, i, ray);
+    //ambient
+    vec4 ambient(amb_r * g_spheres[i].Ka * g_spheres[i].r,
+                 amb_g * g_spheres[i].Ka * g_spheres[i].g,
+                 amb_b * g_spheres[i].Ka * g_spheres[i].b, 1.0f);
 
+    vec4 color = ambient;
+    color += lightContribution(P, N, i, ray);
+    //reflection
+    vec4 v = -2*dot(N,c)*N + c;
+    v = normalize(v);
+
+    Ray reflection;
+    reflection.origin = P;
+    reflection.dir = v;
+
+    vec4 reflectColor = g_spheres[i].Kr * trace(reflection, depth + 1);
+    color += reflectColor;
+    color.w = 1.0f;
     return color;
 }
 
